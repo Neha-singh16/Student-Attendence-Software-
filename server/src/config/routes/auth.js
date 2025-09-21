@@ -8,6 +8,8 @@ const { v4: uuidv4 } = require('uuid');
 const Student = require('../models/students');
 const User = require('../models/user');
 const RefreshToken = require('../models/RefreshToken');
+// const crypto = require('crypto');
+const validator = require('validator');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN || '15m';
@@ -75,10 +77,7 @@ router.post('/login', async (req, res) => {
     const accessToken = signAccessToken(user);
     const refreshToken = await createRefreshToken(user._id.toString());
 
-    // res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: REFRESH_TTL_DAYS*24*3600*1000 });
-    // inside routes/auth.js -> login handler, after accessToken and refreshToken are created
 
-// set short-lived access token in cookie as well for convenience (cookie name: token)
 res.cookie('token', accessToken, {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production', // keep false on localhost dev
@@ -86,7 +85,7 @@ res.cookie('token', accessToken, {
   maxAge: 15 * 60 * 1000 // 15 minutes (match access token expiry)
 });
 
-// existing refreshToken cookie (keep as-is)
+
 res.cookie('refreshToken', refreshToken, {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -94,9 +93,8 @@ res.cookie('refreshToken', refreshToken, {
   maxAge: REFRESH_TTL_DAYS * 24 * 3600 * 1000
 });
 
-// finally return useful info (do NOT return refresh token body)
 res.json({
-  accessToken, // optional since cookie is set; useful for API clients
+  accessToken, 
   user: { id: user._id, firstName: user.firstName, role: user.role }
 });
 
@@ -156,12 +154,15 @@ router.post('/claim', async (req, res) => {
     if (!validator.isEmail(email)) return res.status(400).json({ error: 'invalid email' });
     if (password.length < 8) return res.status(400).json({ error: 'password too short' });
 
-    // find student by claimCode and that is unclaimed
-    const student = await Student.findOne({ claimCode: claimCode.trim(), status: 'unclaimed' });
+    // hashed lookup to avoid storing plaintext codes
+    const secret = process.env.CLAIM_SECRET || 'dev-claim-secret';
+    const codeHash = crypto.createHmac('sha256', secret).update(String(claimCode)).digest('hex');
+    const now = new Date();
+    const student = await Student.findOne({ claimCodeHash: codeHash, status: 'unclaimed', claimExpiresAt: { $gt: now } });
     if (!student) return res.status(404).json({ error: 'invalid_or_already_claimed' });
 
-    if (student.claimExpiresAt && student.claimExpiresAt < new Date()) {
-      return res.status(410).json({ error: 'claim_expired' });
+    if (student.claimLockedUntil && student.claimLockedUntil > new Date()) {
+      return res.status(429).json({ error: 'too_many_attempts' });
     }
 
     const session = await mongoose.startSession();
@@ -188,13 +189,15 @@ router.post('/claim', async (req, res) => {
       });
       await newUser.save({ session });
 
-      // link student and mark claimed
-      student.userId = newUser._id;
-      student.status = 'claimed';
-      student.claimCode = null;
-      student.claimExpiresAt = null;
-      student.claimedAt = new Date();
-      await student.save({ session });
+  // link student and mark claimed
+  student.userId = newUser._id;
+  student.status = 'claimed';
+  student.claimedAt = new Date();
+  student.claimCodeHash = null;
+  student.claimCode = null;
+  student.claimAttempts = 0;
+  student.claimLockedUntil = null;
+  await student.save({ session });
 
       await session.commitTransaction();
       session.endSession();

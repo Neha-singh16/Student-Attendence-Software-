@@ -9,11 +9,13 @@ const authRoutes = require('./config/routes/auth');
 const usersRoutes = require('./config/routes/users');
 const classesRoutes = require('./config/routes/class');
 
-// const studentsRoutes = require('./config/routes/students');
+const studentsRoutes = require('./config/routes/students');
 
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+// parse urlencoded bodies (for form posts from Postman or HTML forms)
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Rate limiters
@@ -24,7 +26,7 @@ app.use('/checkin', rateLimit({ windowMs: 1000, max: 10 }));
 app.use('/auth', authRoutes);
 app.use('/users', usersRoutes);
 app.use('/classes', classesRoutes);
-// app.use('/students', studentsRoutes);
+app.use('/students', studentsRoutes);
 
 
 // health

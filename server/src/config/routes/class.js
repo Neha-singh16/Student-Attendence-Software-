@@ -308,9 +308,14 @@ const streamifier = require('streamifier');
 const multer = require('multer');
 const validator = require('validator');
 const crypto = require('crypto');
+// local helper for claim hashing (same as students route)
+function hashClaimCode(code) {
+  const secret = process.env.CLAIM_SECRET || 'dev-claim-secret';
+  return crypto.createHmac('sha256', secret).update(String(code)).digest('hex');
+}
 
 const { userAuth, requireRole } = require('../middleware/userAuth');
-const Class = require('../models/Class');
+const Class = require('../models/class');
 const Student = require('../models/students');
 const User = require('../models/user');
 
@@ -487,11 +492,14 @@ router.post('/:id/students/upload', userAuth, requireRole('teacher'), upload.sin
             email: item.email || null,
             classId: classOid,
             userId: linkedUser ? linkedUser._id : null,
-            claimCode: linkedUser ? null : claimCode,
+            claimCode: null,
+            claimCodeHash: hashClaimCode(claimCode),
             claimExpiresAt: linkedUser ? null : claimExpiresAt,
             status: linkedUser ? 'claimed' : 'unclaimed'
           });
           await student.save({ session });
+          // attach one-time claimCode to created output for teacher (dev-only)
+          student._oneTimeClaimCode = claimCode;
           created.push(student);
         } else {
           // if linkedUser exists, create student with userId
@@ -519,7 +527,7 @@ router.post('/:id/students/upload', userAuth, requireRole('teacher'), upload.sin
         toInsertCount: normalized.length,
         added: created.length,
         errors,
-        created: created.map(s => ({ id: s._id, name: s.name, rollNo: s.rollNo, userId: s.userId, claimCode: s.claimCode })),
+  created: created.map(s => ({ id: s._id, name: s.name, rollNo: s.rollNo, userId: s.userId, claimCode: s._oneTimeClaimCode || null })),
         createdUsersDev
       });
     } catch (txErr) {

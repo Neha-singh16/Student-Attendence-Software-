@@ -9,9 +9,9 @@ const UserSchema = new mongoose.Schema({
   lastName: { type: String },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  gender: { type: String, enum: ['male','female','other'], default: null },
+  gender: { type: String, enum: ['male','female','other', null], default: null },
   profilePicture: { type: String, default: null },
-  tokenVersion: { type: Number, default: 0 } // for instant revoke
+  tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // hash passwordHash field if modified
