@@ -154,18 +154,21 @@ router.post(
         );
       }
 
-      // Return claim code and invite token to teacher once (dev-only). In prod, send via email/SMS.
+      // By default do not return plaintext secrets. For development/testing
+      // set DEV_RETURN_SECRETS=true to include `tempPassword`, `claimCode`, and `inviteToken`.
       const resp = {
         student: {
           id: student._id,
           name: student.name,
           rollNo: student.rollNo,
           userId: student.userId,
-        },
-        tempPassword,
-        claimCode: plainClaim,
+        }
       };
-      if (inviteToken) resp.inviteToken = inviteToken; // dev-only
+      if (process.env.DEV_RETURN_SECRETS === 'true') {
+        resp.tempPassword = tempPassword;
+        resp.claimCode = plainClaim;
+        if (inviteToken) resp.inviteToken = inviteToken;
+      }
       res.status(201).json(resp);
     } catch (err) {
       console.error("POST /students error", err);
@@ -597,12 +600,10 @@ router.post(
       student.claimLockedUntil = null;
       await student.save();
 
-      // in prod you would email/sms — here we return for dev (one-time)
-      res.json({
-        ok: true,
-        claimCode: newCode,
-        expiresAt: student.claimExpiresAt,
-      });
+      // in prod you would email/sms — allow returning the plaintext only with DEV_RETURN_SECRETS
+      const out = { ok: true, expiresAt: student.claimExpiresAt };
+      if (process.env.DEV_RETURN_SECRETS === 'true') out.claimCode = newCode;
+      res.json(out);
     } catch (err) {
       console.error("POST /students/:id/regenerate-claim", err);
       res.status(500).json({ error: "server_error" });

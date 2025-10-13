@@ -1,25 +1,32 @@
-// src/models/Student.js
+
+
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
-const StudentSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-  name: { type: String, required: true, trim: true },
-  rollNo: { type: String, required: true, trim: true },
+const SessionSchema = new mongoose.Schema({
   classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true },
-  email: { type: String, default: null, lowercase: true, trim: true },
-  consent: { type: Boolean, default: true },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
-  // Claim / onboarding fields
-  claimCode: { type: String, default: null, index: true },
-  claimExpiresAt: { type: Date, default: null },
-  status: { type: String, enum: ['unclaimed','claimed','disabled'], default: 'unclaimed' },
-  claimedAt: { type: Date, default: null },
+  title: { type: String, default: '' },
+  scheduledAt: { type: Date, default: null },
+  startAt: { type: Date, default: null },
+  endAt: { type: Date, default: null },
+  status: { type: String, enum: ['draft','open','closed','cancelled'], default: 'draft' },
 
-  qrToken: { type: String, default: null },
+  sessionToken: { type: String, default: null, index: true },
+  tokenExpiresAt: { type: Date, default: null },
+
+  method: { type: String, enum: ['qr','manual','biometric','face'], default: 'qr' },
+  lateWindowMinutes: { type: Number, default: 10 },
+
   meta: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { timestamps: true });
 
-// Index for quick lookup by class + rollNo if needed:
-StudentSchema.index({ classId: 1, rollNo: 1 }, { unique: false });
+// helper to create token
+SessionSchema.methods.createToken = function (ttlMs = 2*60*60*1000) {
+  this.sessionToken = crypto.randomBytes(24).toString('base64url');
+  this.tokenExpiresAt = new Date(Date.now() + ttlMs);
+  return { token: this.sessionToken, expiresAt: this.tokenExpiresAt };
+};
 
-module.exports = mongoose.model('Student', StudentSchema);
+module.exports = mongoose.model('Session', SessionSchema);

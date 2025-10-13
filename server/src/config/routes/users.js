@@ -3,10 +3,39 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const validator = require('validator');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
 
 const { userAuth } = require('../middleware/userAuth');
 const User = require('../models/user');
 const RefreshToken = require('../models/RefreshToken');
+
+// multer setup for avatar uploads
+const AVATAR_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
+if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, AVATAR_DIR);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `${Date.now()}-${uuidv4()}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image uploads allowed'));
+    }
+    cb(null, true);
+  }
+});
 
 router.get('/me', userAuth, async (req, res) => {
   try {
@@ -87,6 +116,39 @@ router.get('/:id', userAuth, async (req, res) => {
   } catch (err) {
     console.error('GET /users/:id error', err);
     res.status(500).json({ error: 'server_error' });
+  }
+});
+
+/**
+ * PUT /user/me/avatar
+ * Upload or replace authenticated user's avatar image
+ */
+router.put('/me/avatar', userAuth, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'no_file_uploaded' });
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'user_not_found' });
+
+    // remove old avatar file if it exists and looks like a local file
+    try {
+      if (user.profilePicture && !user.profilePicture.startsWith('http') && user.profilePicture.includes('uploads')) {
+        const oldPath = path.join(__dirname, '..', '..', user.profilePicture);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+    } catch (e) {
+      console.warn('failed to remove old avatar', e.message);
+    }
+
+    // store relative path so it can be served statically
+    const rel = path.join('uploads', 'avatars', path.basename(req.file.path)).replace(/\\/g, '/');
+    user.profilePicture = rel;
+    await user.save();
+
+    res.json({ ok: true, profilePicture: user.profilePicture, url: `${req.protocol}://${req.get('host')}/${user.profilePicture}` });
+  } catch (err) {
+    console.error('PUT /user/me/avatar error', err);
+    res.status(500).json({ error: 'server_error', detail: err.message });
   }
 });
 
