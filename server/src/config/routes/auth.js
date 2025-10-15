@@ -147,6 +147,37 @@ router.post('/logout', async (req, res) => {
   }
 });
 
+// profile - get current user info
+router.get('/profile', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'token_required' });
+    }
+
+    const token = authHeader.slice(7);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    const user = await User.findById(decoded.sub);
+    if (!user) {
+      return res.status(401).json({ error: 'user_not_found' });
+    }
+
+    res.json({
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    console.error('profile error', err);
+    res.status(401).json({ error: 'invalid_token' });
+  }
+});
+
 router.post('/claim', async (req, res) => {
   try {
     const { claimCode, email, password } = req.body;

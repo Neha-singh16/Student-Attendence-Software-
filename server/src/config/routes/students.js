@@ -47,8 +47,28 @@ function safeEqualHex(a, b) {
 }
 
 /**
+ * GET /students
+ * Get all students (admin/teacher only)
+ */
+router.get("/", userAuth, async (req, res) => {
+  try {
+    // Only admin and teacher can list all students
+    if (!['admin', 'teacher'].includes(req.user.role)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const students = await Student.find().lean();
+    res.json(students);
+  } catch (err) {
+    console.error("GET /students error", err);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+/**
  * POST /students
  * Create a single student (teacher/admin)
+```
  * Body: { name, rollNo, classId, email (optional), createUser: boolean (optional) }
  */
 router.post(

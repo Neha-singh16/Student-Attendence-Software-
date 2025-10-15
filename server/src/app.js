@@ -5,6 +5,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database/db');
+const cors = require('cors');
 
 const authRoutes = require('./config/routes/auth');
 const usersRoutes = require('./config/routes/users');
@@ -24,6 +25,12 @@ app.use(express.json({ limit: '2mb' }));
 // parse urlencoded bodies (for form posts from Postman or HTML forms)
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  credentials: true
+}));
 // serve uploaded static files (avatars etc.)
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 

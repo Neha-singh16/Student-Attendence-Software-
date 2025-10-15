@@ -37,6 +37,22 @@ const upload = multer({
   }
 });
 
+// GET all users (admin only)
+router.get('/', userAuth, async (req, res) => {
+  try {
+    // Only admin can list all users
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    const users = await User.find().select('-passwordHash -__v -tokenVersion');
+    res.json(users);
+  } catch (err) {
+    console.error('GET /users error', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 router.get('/me', userAuth, async (req, res) => {
   try {
     const user = req.user;

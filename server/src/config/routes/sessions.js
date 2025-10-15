@@ -11,6 +11,22 @@ const AttendanceLog = require('../models/AttendanceLog');
 const Class = require('../models/class');
 const sessionEvents = require('../events/sessionEvents');
 
+// GET /session - List all sessions (admin/teacher)
+router.get('/', userAuth, async (req, res) => {
+  try {
+    // Only admin and teacher can list all sessions
+    if (!['admin', 'teacher'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    const sessions = await Session.find().lean();
+    res.json(sessions);
+  } catch (err) {
+    console.error('GET /session error', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // GET /session/list - List sessions for authenticated user
 router.get('/list', userAuth, async (req, res) => {
   try {
